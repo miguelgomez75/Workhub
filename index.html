@@ -591,8 +591,8 @@
   </div>
 
   <header>
-    <div class="logo">biblioteca<span>::</span>casual</div>
-    <div class="tagline">un rincón de experimentos hechos por gusto</div>
+    <div class="logo">Trabajo::hub<span>::</span>casual</div>
+    <div class="tagline">un rincón de herramientas hechas para agilizar el trabajo</div>
     <div class="kbd-hint">
       <span class="kbd">Ctrl K</span> paleta de comandos
     </div>
@@ -625,18 +625,15 @@
    CONFIG
 ══════════════════════════════════════════════ */
 var OWNER      = 'miguelgomez75';
-var REPO       = 'biblioteca-de-proyectos-casuales';
+var REPO       = 'Workhub';
 var BRANCH     = 'main';
-var CACHE_KEY  = 'biblioteca_projects_cache_v2';
+var CACHE_KEY  = 'Workhub_cache_v2';
 var CACHE_TTL  = 5 * 60 * 1000;
 
 var RAW_BASE   = 'https://raw.githubusercontent.com/' + OWNER + '/' + REPO + '/' + BRANCH + '/';
 var ENGINES    = {
   gh:  { label: 'GitHub',    url: function(q){ return 'https://github.com/search?q=' + encodeURIComponent(q); },            home: 'https://github.com' },
   yt:  { label: 'YouTube',   url: function(q){ return 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q); }, home: 'https://youtube.com' },
-  rd:  { label: 'Reddit',    url: function(q){ return 'https://www.reddit.com/search/?q=' + encodeURIComponent(q); },        home: 'https://reddit.com' },
-  x:   { label: 'Twitter/X', url: function(q){ return 'https://twitter.com/search?q=' + encodeURIComponent(q); },           home: 'https://twitter.com' },
-  mdn: { label: 'MDN',       url: function(q){ return 'https://developer.mozilla.org/search?q=' + encodeURIComponent(q); }, home: 'https://developer.mozilla.org' },
 };
 
 /* ══════════════════════════════════════════════
