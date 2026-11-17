@@ -425,7 +425,6 @@ $('#docx-file').addEventListener('change', e => {
    (warns[]) no la bloquean: opción vacía, texto flotante ignorado…
    ════════════════════════════════════════════════════════════════ */
 const QCFG = {
-  keepMarkerInFeedback: false,  // true → la retroalimentación conserva "CORRETA."/"INCORRETA." delante
   optionFeedbackJoin: ' ',      // cómo unir una retroalimentación de opción repartida en varios párrafos
   imageText: '<<Aquí hay una imagen>>',
   chartText: '<<Aquí hay un gráfico>>'
@@ -442,7 +441,6 @@ const WNS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 // Español / portugués / inglés / francés
 const RX_GUIDE = /^\s*(gu[ií]a|guide)\s+(de\s+|d['’]\s*)?(respuesta|resposta|r[eé]ponse|response|answer)s?\s*:?\s*$|^\s*(answer|response)\s+(guide|key)\s*:?\s*$/i;
 const RX_MARK = /^\s*(IN)?CORR(?:ETA|ECTA|ECT|ECTE|ETO|ECTO)\b\s*[.:;!\-–—]*\s*/i;
-const RX_ONLYMEDIA = /^(?:<<Aquí hay un[ao]? (?:imagen|gráfico)>>\s*)+$/;
 const RX_TRUE =/\b(verdadero|verdadeiro|verdadera|verdadeira|true|vrai)\b/i;
 const RX_FALSE = /\b(falso|falsa|false|faux|fausse)\b/i;
 
@@ -603,28 +601,20 @@ function buildQuestion(cur, n) {
     opts.forEach((o, i) => {
       if (o.value !== i + 1) q.errors.push('Salto en las letras de las opciones: en la posición ' + (i + 1) + ' aparece «' + letterOf(o.value) + ')» y se esperaba «' + letterOf(i + 1) + ')».');
     });
-    const seenErr = q.errors.length;
     opts.forEach((o, i) => {
       const L = letterOf(i + 1) + ')';
-      // una imagen en su propio párrafo entre la opción y su CORRETA./INCORRETA. es parte de la opción
-      while (o.fb.length && o.fb[0].kind === 'p' && RX_ONLYMEDIA.test(o.fb[0].text)) {
-        o.title = (o.title ? o.title + ' ' : '') + o.fb.shift().text;
-      }
-      const raw = blocksToText(o.fb, QCFG.optionFeedbackJoin);
-      const m = RX_MARK.exec(raw);
-      if (!m) { q.errors.push('La opción ' + L + ' no tiene retroalimentación que empiece por CORRETA./INCORRETA.'); return; }
-      o.correct = !m[1];
-      o.fbText = QCFG.keepMarkerInFeedback ? raw.trim() : raw.slice(m[0].length).trim();
+      // retroalimentación = TODO lo que hay entre esta opción y la siguiente (con "CORRETA."/"INCORRETA." incluido, tal cual)
+      const raw = blocksToText(o.fb, QCFG.optionFeedbackJoin).trim();
+      o.fbText = raw;
+      const m = RX_MARK.exec(raw);          // solo informativo (etiqueta verde/roja); no es obligatorio
+      o.correct = m ? !m[1] : null;
       if (!o.title) q.warns.push('La opción ' + L + ' no tiene texto (¿había un cuadro de texto o una imagen?).');
     });
     const A = opts[0] && opts[0].title, B = opts[1] && opts[1].title;
     const isTF = opts.length === 2 && ((RX_TRUE.test(A) && RX_FALSE.test(B)) || (RX_FALSE.test(A) && RX_TRUE.test(B)));
     q.type = isTF ? 'tf' : 'mc';
     if (!q.errors.length) {
-      const nCorrect = opts.filter(o => o.correct).length;
-      if (isTF && nCorrect !== 1) q.warns.push('En verdadero/falso se esperaba 1 opción correcta y hay ' + nCorrect + '.');
-      if (!isTF && nCorrect === 0) q.warns.push('Ninguna opción está marcada como correcta.');
-      const tag = o => o.correct ? 'correcta' : 'incorrecta';
+      const tag = o => o.correct === null ? null : o.correct ? 'correcta' : 'incorrecta';
       if (isTF) {
         q.fields = [
           { label: 'Enunciado', text: stem },
