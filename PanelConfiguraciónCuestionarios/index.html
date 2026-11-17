@@ -441,7 +441,8 @@ const WNS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 // Español / portugués / inglés / francés
 const RX_GUIDE = /^\s*(gu[ií]a|guide)\s+(de\s+|d['’]\s*)?(respuesta|resposta|r[eé]ponse|response|answer)s?\s*:?\s*$|^\s*(answer|response)\s+(guide|key)\s*:?\s*$/i;
 const RX_MARK = /^\s*(IN)?CORR(?:ETA|ECTA|ECT|ECTE|ETO|ECTO)\b\s*[.:;!\-–—]*\s*/i;
-const RX_TRUE =/\b(verdadero|verdadeiro|verdadera|verdadeira|true|vrai)\b/i;
+const RX_MARK_INLINE = /(?:^|[\s.!?)\]»"”])((?:IN)?CORR(?:ETA|ECTA|ECT|ECTE|ETO|ECTO)\b)/;
+const RX_TRUE = /\b(verdadero|verdadeiro|verdadera|verdadeira|true|vrai)\b/i;
 const RX_FALSE = /\b(falso|falsa|false|faux|fausse)\b/i;
 
 const qEl = (n, name) => { if (!n) return null; for (const c of n.children) if (c.localName === name) return c; return null; };
@@ -603,8 +604,18 @@ function buildQuestion(cur, n) {
     });
     opts.forEach((o, i) => {
       const L = letterOf(i + 1) + ')';
+      // si la retroalimentación quedó en el mismo párrafo que la opción (sin salto de línea),
+      // se corta en la primera marca CORRETA./INCORRETA. (en mayúsculas, o al inicio de una línea)
+      let inlineFb = '';
+      {
+        let cut = -1;
+        const m1 = RX_MARK_INLINE.exec(o.title);
+        if (m1) cut = m1.index + m1[0].length - m1[1].length;
+        else { const mm = /\n\s*((?:IN)?CORR(?:ETA|ECTA|ECT|ECTE|ETO|ECTO)\b)/i.exec(o.title); if (mm) cut = mm.index + mm[0].length - mm[1].length; }
+        if (cut >= 0) { inlineFb = o.title.slice(cut).trim(); o.title = o.title.slice(0, cut).trim(); }
+      }
       // retroalimentación = TODO lo que hay entre esta opción y la siguiente (con "CORRETA."/"INCORRETA." incluido, tal cual)
-      const raw = blocksToText(o.fb, QCFG.optionFeedbackJoin).trim();
+      const raw = [inlineFb, blocksToText(o.fb, QCFG.optionFeedbackJoin)].filter(Boolean).join(QCFG.optionFeedbackJoin).trim();
       o.fbText = raw;
       const m = RX_MARK.exec(raw);          // solo informativo (etiqueta verde/roja); no es obligatorio
       o.correct = m ? !m[1] : null;
