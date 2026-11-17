@@ -604,18 +604,25 @@ function buildQuestion(cur, n) {
     });
     opts.forEach((o, i) => {
       const L = letterOf(i + 1) + ')';
-      // si la retroalimentación quedó en el mismo párrafo que la opción (sin salto de línea),
-      // se corta en la primera marca CORRETA./INCORRETA. (en mayúsculas, o al inicio de una línea)
-      let inlineFb = '';
-      {
-        let cut = -1;
-        const m1 = RX_MARK_INLINE.exec(o.title);
-        if (m1) cut = m1.index + m1[0].length - m1[1].length;
-        else { const mm = /\n\s*((?:IN)?CORR(?:ETA|ECTA|ECT|ECTE|ETO|ECTO)\b)/i.exec(o.title); if (mm) cut = mm.index + mm[0].length - mm[1].length; }
-        if (cut >= 0) { inlineFb = o.title.slice(cut).trim(); o.title = o.title.slice(0, cut).trim(); }
+      // El texto de la opción puede ocupar varios párrafos y la marca CORRETA./INCORRETA. puede ir al
+      // final de uno de ellos. Se busca la PRIMERA marca entre la opción y la siguiente: lo anterior es
+      // el título y desde la marca hasta la siguiente opción es la retroalimentación (tal cual).
+      // Marca válida: en MAYÚSCULAS en cualquier punto, o (en cualquier caso) al inicio de un párrafo
+      // posterior o de una línea. Si no hay marca, título = la opción y retroalimentación = lo demás.
+      const pieces = [o.title, ...o.fb.map(it => blocksToText([it]))];
+      let hit = -1, cut = 0;
+      for (let k = 0; k < pieces.length && hit < 0; k++) {
+        const p = pieces[k], m1 = RX_MARK_INLINE.exec(p);
+        if (m1) { hit = k; cut = m1.index + m1[0].length - m1[1].length; }
+        else if (k > 0 && RX_MARK.test(p)) { hit = k; cut = 0; }
+        else { const mm = /\n\s*((?:IN)?CORR(?:ETA|ECTA|ECT|ECTE|ETO|ECTO)\b)/i.exec(p); if (mm) { hit = k; cut = mm.index + mm[0].length - mm[1].length; } }
       }
-      // retroalimentación = TODO lo que hay entre esta opción y la siguiente (con "CORRETA."/"INCORRETA." incluido, tal cual)
-      const raw = [inlineFb, blocksToText(o.fb, QCFG.optionFeedbackJoin)].filter(Boolean).join(QCFG.optionFeedbackJoin).trim();
+      let raw;
+      if (hit < 0) raw = pieces.slice(1).filter(Boolean).join(QCFG.optionFeedbackJoin).trim();
+      else {
+        o.title = [...pieces.slice(0, hit), pieces[hit].slice(0, cut)].map(x => x.trim()).filter(Boolean).join(' ');
+        raw = [pieces[hit].slice(cut).trim(), ...pieces.slice(hit + 1)].filter(Boolean).join(QCFG.optionFeedbackJoin).trim();
+      }
       o.fbText = raw;
       const m = RX_MARK.exec(raw);          // solo informativo (etiqueta verde/roja); no es obligatorio
       o.correct = m ? !m[1] : null;
