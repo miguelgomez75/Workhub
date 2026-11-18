@@ -103,6 +103,18 @@ select:focus,input:focus{border-color:var(--accent)}
 .q-alert{font:12.5px/1.5 var(--font-ui);padding:8px 10px;border-radius:8px;margin-bottom:6px}
 .q-alert.bad{background:var(--bad-dim);border:1px solid var(--bad);color:var(--bad)}
 .q-alert.warn{background:var(--accent-dim);border:1px solid var(--accent);color:var(--accent)}
+.q-alert.info{background:var(--surface-2);border:1px solid var(--border-2);color:var(--text-2)}
+.qtag.blk{color:var(--text);border-color:var(--text-3);background:var(--surface-2);cursor:help}
+.q-blocks{margin:-.4rem 0 .9rem;font:12px/1.5 var(--font-ui);color:var(--text-2)}
+.q-blocks summary{cursor:pointer;font:11.5px var(--font-mono);color:var(--text-2)}
+.q-blocks .blk{display:flex;gap:8px;align-items:flex-start;margin-top:6px;padding:6px 9px;background:var(--bg);border:1px solid var(--border);border-radius:8px}
+.q-blocks .blk .t{flex:1;min-width:0;white-space:pre-wrap;word-break:break-word}
+.q-blocks .blk .t b{color:var(--accent);font:500 11px var(--font-mono);display:block;margin-bottom:2px}
+/* el lector acompaña al scroll: así el documento sigue a la vista mientras copias campos */
+@media(min-width:901px){
+  #panel-reader{position:sticky;top:1rem;max-height:calc(100dvh - 2rem);display:flex;flex-direction:column}
+  #panel-reader .docx-viewport{flex:1;min-height:0;max-height:none}
+}
 
 
 </style>
@@ -147,6 +159,7 @@ select:focus,input:focus{border-color:var(--accent)}
     <div class="cat-bar"><i id="cat-bar-fill"></i></div>
     <div class="cat-count" id="cat-count"></div>
     <div class="q-summary" id="q-summary"></div>
+    <div class="q-blocks" id="q-blocks"></div>
     <div class="item-list" id="item-list"></div>
     <div class="prev-info" id="prev-info"></div>
     <div class="q-panel" id="q-panel"></div>
@@ -442,6 +455,8 @@ const WNS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const RX_GUIDE = /^\s*(gu[ií]a|guide)\s+(de\s+|d['’]\s*)?(respuesta|resposta|r[eé]ponse|response|answer)s?\s*:?\s*$|^\s*(answer|response)\s+(guide|key)\s*:?\s*$/i;
 const RX_MARK = /^\s*(IN)?CORR(?:ETA|ECTA|ECT|ECTE|ETO|ECTO)\b\s*[.:;!\-–—]*\s*/i;
 const RX_MARK_INLINE = /(?:^|[\s.!?)\]»"”])((?:IN)?CORR(?:ETA|ECTA|ECT|ECTE|ETO|ECTO)\b)/;
+// Encabezado de bloque («Bloque 1: …», «Bloco 1. …», «Block 1 – …», «Bloc 1 : …»): instrucciones para montar el cuestionario, no son parte de ninguna pregunta
+const RX_BLOCK = /^\s*(bloque|bloco|block|bloc)\s*\d+\s*[.:\-–—)]/i;
 const RX_TRUE = /\b(verdadero|verdadeiro|verdadera|verdadeira|true|vrai)\b/i;
 const RX_FALSE = /\b(falso|falsa|false|faux|fausse)\b/i;
 
@@ -732,7 +747,7 @@ async function parseDocxQuestions(buf) {
   }
 
   // reparto en preguntas
-  const questions = [], preface = [], docWarnings = [];
+  const questions = [], preface = [], docWarnings = [], blockNotes = [];
   let cur = null, mainAbs = null, last = 0;
   const mkBad = (k, msg) => ({ n: k, type: 'missing', errors: [msg], warns: [], fields: [] });
   function closeCur() {
@@ -760,6 +775,10 @@ async function parseDocxQuestions(buf) {
       cur = { shown: it.np.value, first: it, items: [], guide: false };
       continue;
     }
+    if (it.kind === 'p' && it.text && !isOptionItem(it) && RX_BLOCK.test(it.text)) {
+      blockNotes.push({ text: it.text, before: (cur ? cur.shown : last) + 1 });   // se aplica a la pregunta siguiente
+      continue;
+    }
     if (!cur) {
       if (it.kind === 'p' && it.text) preface.push(it.text);
       if (isOptionItem(it)) docWarnings.push('Hay una opción («' + it.text.slice(0, 30) + '») antes de la primera pregunta.');
@@ -772,7 +791,7 @@ async function parseDocxQuestions(buf) {
 
   const bad = questions.filter(q => q.errors.length).length;
   const warn = questions.filter(q => !q.errors.length && q.warns.length).length;
-  return { total: last, questions, preface, docWarnings, bad, warn };
+  return { total: last, questions, preface, docWarnings, blocks: blockNotes, bad, warn };
 }
 
 /* ════════════════════════════════════════════════════════════════
@@ -943,9 +962,30 @@ const copiedFields = {};   // { 'catId:índice': Set(nº de campo) } — solo en
 
 function currentParsed(cat) { return cat ? (docsParsed[cat.doc] || docsParsed[cat.name] || null) : null; }
 
+/* Instrucciones de bloque («Bloco 1. O sistema selecionará…»): se guardan aparte, no son campos de pregunta. */
+let blocksOpen = false;
+function renderBlocks(parsed) {
+  const box = $('#q-blocks');
+  const bl = parsed && parsed.blocks || [];
+  if (!bl.length) { box.innerHTML = ''; return; }
+  box.innerHTML = '<details' + (blocksOpen ? ' open' : '') + '><summary>Instrucciones de bloque (' + bl.length + ')</summary>' +
+    bl.map((b, i) => '<div class="blk"><div class="t"><b>antes de la pregunta #' + b.before + '</b>' + esc(b.text) + '</div><button class="btn sm" data-b="' + i + '">Copiar</button></div>').join('') + '</details>';
+  const det = box.querySelector('details');
+  det.addEventListener('toggle', () => { blocksOpen = det.open; });
+  box.querySelectorAll('button[data-b]').forEach(btn => btn.addEventListener('click', async () => {
+    await copyText(bl[+btn.dataset.b].text);
+    const old = btn.textContent; btn.textContent = 'Copiado ✓'; setTimeout(() => { btn.textContent = old; }, 1200);
+  }));
+}
+function blkTag(parsed, i) {
+  const bk = parsed ? (parsed.blocks || []).filter(b => b.before === i + 1) : [];
+  return bk.length ? '<span class="qtag blk" title="' + esc(bk.map(b => b.text).join('\n')) + '">B</span>' : '';
+}
+
 function updateQSummary(cat) {
   const el = $('#q-summary');
   const parsed = currentParsed(cat);
+  renderBlocks(parsed);
   if (!parsed) { el.innerHTML = ''; return; }
   const badNums = parsed.questions.filter(q => q.errors.length).map(q => '#' + q.n);
   let t = 'Analizado: ' + parsed.total + ' preguntas';
@@ -974,6 +1014,7 @@ function updateFieldsPanel() {
   let h = '<div class="q-head"><span>Pregunta <b>#' + q.n + '</b> · ' + esc(t.label) + (q.fields.length ? ' · ' + q.fields.length + ' campos' : '') + '</span>';
   if (q.fields.length) h += '<span class="q-btns"><button class="btn sm go" id="q-next">Copiar siguiente ▸</button><button class="btn sm" id="q-reset" title="Quitar las marcas de copiado">↺</button></span>';
   h += '</div>';
+  (parsed.blocks || []).filter(b => b.before === q.n).forEach(b => { h += '<div class="q-alert info">Aquí empieza un bloque (solo informativo): ' + esc(b.text) + '</div>'; });
   q.errors.forEach(e => { h += '<div class="q-alert bad">⚠ No se puede tratar en el index: ' + esc(e) + '</div>'; });
   q.warns.forEach(w => { h += '<div class="q-alert warn">' + esc(w) + '</div>'; });
   if (q.fields.length) {
@@ -1060,7 +1101,7 @@ function renderItemList() {
       }
     }
     rows += '<div class="item-row' + (val.trim() ? ' done' : '') + (sel ? ' sel' : '') + '" data-i="' + i + '">' +
-      '<span class="pos">#' + (i + 1) + '</span>' + tag +
+      '<span class="pos">#' + (i + 1) + '</span>' + tag + blkTag(parsed, i) +
       '<input type="text" class="ans" data-i="' + i + '" placeholder="respuesta…" value="' + esc(val) + '"></div>';
   }
   list.innerHTML = rows;
