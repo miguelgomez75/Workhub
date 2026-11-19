@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>quiz::hub — Word → Moodle XML</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0c0c10;--surface:#13131a;--surface-2:#1c1c26;--border:#25253a;--border-2:#40405a;--text:#e2e2f0;--text-2:#8080a0;--text-3:#454560;--accent:#e8a030;--accent-dim:#271d08;--good:#7cc98a;--good-dim:#132a17;--bad:#f87171;--bad-dim:#2a1212;--font-ui:'Inter',system-ui,sans-serif;--font-mono:'IBM Plex Mono',monospace;--radius:10px;--radius-lg:16px}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font-family:var(--font-ui);min-height:100dvh;padding:2rem 1rem 3rem}
+.logo{font:600 1.9rem var(--font-mono);letter-spacing:-.03em;text-align:center}.logo span{color:var(--accent)}
+.tagline{font-size:12.5px;color:var(--text-3);margin-top:4px;letter-spacing:.06em;text-transform:uppercase;text-align:center}
+header{margin-bottom:1.6rem}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.3rem}
+.section-title{font:11px var(--font-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--text-3);margin-bottom:.9rem;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+label{font:11px var(--font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--text-3);display:block;margin-bottom:5px}
+select,input[type=text],input[type=number]{background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font:13px var(--font-mono);padding:9px 11px;outline:none;width:100%}
+select:focus,input:focus{border-color:var(--accent)}
+.btn{background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:9px 14px;font:500 13px var(--font-ui);cursor:pointer;transition:border-color .15s,transform .08s;white-space:nowrap}
+.btn:hover{border-color:var(--border-2)}.btn:active{transform:scale(.97)}
+.btn.go{background:var(--accent);border-color:var(--accent);color:#000;font-weight:600}
+.btn.sm{padding:6px 11px;font-size:12px}
+.hint{font:11.5px/1.55 var(--font-mono);color:var(--text-3);margin-top:.7rem}
+.field{margin-bottom:.9rem}
+.field:last-child{margin-bottom:0}
+.qtag{font:10px var(--font-mono);color:var(--text-2);border:1px solid var(--border-2);border-radius:4px;padding:1px 5px;flex-shrink:0;letter-spacing:.03em;min-width:26px;text-align:center}
+.qtag.bad{color:var(--bad);border-color:var(--bad);background:var(--bad-dim)}
+.qtag.warn{color:var(--accent);border-color:var(--accent)}
+.btn:disabled{opacity:.4;cursor:default}
+.q-alert{font:12.5px/1.5 var(--font-ui);padding:8px 10px;border-radius:8px;margin-bottom:6px}
+.q-alert.bad{background:var(--bad-dim);border:1px solid var(--bad);color:var(--bad)}
+.q-alert.warn{background:var(--accent-dim);border:1px solid var(--accent);color:var(--accent)}
+.q-alert.info{background:var(--surface-2);border:1px solid var(--border-2);color:var(--text-2)}
+
+.shell{max-width:1000px;margin:0 auto;display:flex;flex-direction:column;gap:1rem}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.8rem}
+@media(max-width:700px){.row3{grid-template-columns:1fr}.doc-row{grid-template-columns:1fr!important}}
+.chk{display:flex;align-items:center;gap:7px;font:12.5px var(--font-ui);color:var(--text-2);margin-top:.2rem}
+.chk label{margin:0;text-transform:none;font:inherit;color:inherit}
+.drop{border:1.5px dashed var(--border-2);border-radius:var(--radius);padding:1.2rem 1rem;text-align:center;color:var(--text-2);font:13px var(--font-ui);cursor:pointer}
+.drop.hot{border-color:var(--accent);color:var(--accent)}
+.doc-row{display:grid;grid-template-columns:1fr 120px 170px;gap:8px;align-items:center;padding:8px 10px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;margin-top:6px}
+.doc-row .nm{font:12.5px var(--font-ui);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.doc-row .sub{grid-column:1/-1;font:11.5px var(--font-mono);color:var(--text-3)}
+table.prev{width:100%;border-collapse:collapse;font:12px var(--font-ui)}
+table.prev td,table.prev th{padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}
+table.prev th{font:11px var(--font-mono);color:var(--text-3);text-transform:uppercase}
+.scroll{max-height:420px;overflow:auto;margin-top:.7rem}
+.sum{font:12.5px/1.6 var(--font-ui);color:var(--text-2)}.sum b{color:var(--accent)}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">quiz<span>::</span>hub</div>
+  <div class="tagline">Word (.zip) → Moodle XML</div>
+</header>
+<div class="shell">
+  <div class="card">
+    <div class="section-title">Ajustes (nombre y categorías)</div>
+    <div class="row3">
+      <div class="field"><label for="code">Código de asignatura</label><input type="text" id="code" placeholder="p.ej. MM093"></div>
+      <div class="field"><label for="lang">Idioma</label><select id="lang"></select></div>
+      <div class="field"><label for="rev">Nº de modificación (X…)</label><input type="number" id="rev" min="1" value="1"></div>
+    </div>
+    <div class="chk"><input type="checkbox" id="single"><label for="single">Respuesta única (botones de radio) en las de una sola correcta. Tu XML de ejemplo usa «varias respuestas» (casillas).</label></div>
+  </div>
+  <div class="card">
+    <div class="section-title">Documentos<button class="btn sm" id="open">Abrir .zip / .docx</button></div>
+    <input type="file" id="file" accept=".zip,.docx" multiple hidden>
+    <div class="drop" id="drop">Arrastra aquí un .zip con tus Word (o varios .docx)</div>
+    <div id="docs"></div>
+    <div class="hint">Tipo → carpeta: Auto = autoevaluacion · E0 = examen · R1 = recuperacion 1 · R2 = recuperacion 2. Se adivina por el nombre del archivo y se puede cambiar. La carpeta también se puede escribir a mano. Los «Bloque N» salen de los encabezados del Word.</div>
+  </div>
+  <div class="card">
+    <div class="section-title">Preguntas</div>
+    <div class="sum" id="sum"></div>
+    <div class="scroll" id="prev"></div>
+  </div>
+  <div class="card">
+    <div class="section-title">Moodle XML</div>
+    <div class="field"><label for="fname">Nombre del archivo (opcional)</label><input type="text" id="fname" placeholder="preguntas-CÓDIGO-idioma-AAAAMMDD-HHMM.xml"></div>
+    <div class="btns"><button class="btn go" id="gen" disabled>Generar y descargar XML</button><button class="btn" id="copy" disabled>Copiar XML</button></div>
+    <div class="hint" id="msg"></div>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.2/jszip.min.js"></script>
+<!-- bc-theme --><script src="../theme.js"></script>
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); }
+  catch (e) {
+    const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta);
+    ta.select(); try { document.execCommand('copy'); } catch (e2) {} ta.remove();
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   LECTOR DE PREGUNTAS (.docx) — el mismo de panel::hub
+   ════════════════════════════════════════════════════════════════ */
+const QCFG = {
+  optionFeedbackJoin: ' ',      // cómo unir una retroalimentación de opción repartida en varios párrafos
+  imageText: '<<Aquí hay una imagen>>',
+  chartText: '<<Aquí hay un gráfico>>'
+};
+const QTYPES = {
+  mc: { label: 'Opción múltiple', short: 'OM' },
+  tf: { label: 'Verdadero o falso', short: 'VF' },
+  comb: { label: 'Combinatoria', short: 'CO' },
+  essay: { label: 'Ensayo', short: 'EN' },
+  bad: { label: 'Tipo no reconocido', short: '?' },
+  missing: { label: 'Pregunta ausente', short: '?' }
+};
+const WNS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+// Español / portugués / inglés / francés
+const RX_GUIDE = /^\s*(gu[ií]a|guide)\s+(de\s+|d['’]\s*)?(respuesta|resposta|r[eé]ponse|response|answer)s?\s*:?\s*$|^\s*(answer|response)\s+(guide|key)\s*:?\s*$/i;
+const RX_MARK = /^\s*(IN)?CORR(?:ETA|ECTA|ECT|ECTE|ETO|ECTO)\b\s*[.:;!\-–—]*\s*/i;
+const RX_MARK_INLINE = /(?:^|[\s.!?)\]»"”])((?:IN)?CORR(?:ETA|ECTA|ECT|ECTE|ETO|ECTO)\b)/;
+// Encabezado de bloque («Bloque 1: …», «Bloco 1. …», «Block 1 – …», «Bloc 1 : …», «Bloco Comum. …»): instrucciones para montar el cuestionario, no son parte de ninguna pregunta
+const RX_BLOCK = /^\s*(?:bloque|bloco|block|bloc)\s*(?:\d+\s*[.:\-–—)]|(?:comum|com[uú]n|common|commun)\b)/i;
+// Puntuación al final del enunciado: «(0,75 pontos)», «(1 punto)», «(0.5 points)»…
+const RX_POINTS = /\s*\(\s*(\d+(?:[.,]\d+)?\s*(?:pontos?|puntos?|points?|pts?\.?|punts?))\s*\)\s*\.?\s*$/i;
+const RX_TRUE = /\b(verdadero|verdadeiro|verdadera|verdadeira|true|vrai)\b/i;
+const RX_FALSE = /\b(falso|falsa|false|faux|fausse)\b/i;
+
+const qEl = (n, name) => { if (!n) return null; for (const c of n.children) if (c.localName === name) return c; return null; };
+const qAttr = (n, name) => n ? (n.getAttributeNS(WNS, name) || n.getAttribute('w:' + name)) : null;
+const letterOf = v => { let s = ''; while (v > 0) { v--; s = String.fromCharCode(97 + v % 26) + s; v = Math.floor(v / 26); } return s; };
+const qClean = s => s.replace(/[​‌‍⁠﻿­]/g, '').replace(/[   ]/g, ' ')
+  .split('\n').map(l => l.replace(/[ \t]+/g, ' ').trim()).join('\n').replace(/\n{2,}/g, '\n').trim();
+
+function parseNumbering(xml, toDom) {
+  const res = { abs: {}, num: {} };
+  if (!xml) return res;
+  const d = toDom(xml);
+  for (const a of d.getElementsByTagNameNS(WNS, 'abstractNum')) {
+    const lv = {};
+    for (const l of a.children) if (l.localName === 'lvl') {
+      const st = qAttr(qEl(l, 'start'), 'val');
+      lv[+qAttr(l, 'ilvl')] = { fmt: qAttr(qEl(l, 'numFmt'), 'val') || 'decimal', start: st === null || st === '' ? 1 : +st };
+    }
+    res.abs[qAttr(a, 'abstractNumId')] = lv;
+  }
+  for (const n of d.getElementsByTagNameNS(WNS, 'num')) {
+    const ov = {};
+    for (const o of n.children) if (o.localName === 'lvlOverride') {
+      const s = qEl(o, 'startOverride'); if (s) ov[+qAttr(o, 'ilvl')] = +qAttr(s, 'val');
+    }
+    res.num[qAttr(n, 'numId')] = { abs: qAttr(qEl(n, 'abstractNumId'), 'val'), overrides: ov };
+  }
+  return res;
+}
+
+function parseStyleNums(xml, toDom) {
+  const map = {};
+  if (!xml) return map;
+  const d = toDom(xml), raw = {};
+  for (const s of d.getElementsByTagNameNS(WNS, 'style')) {
+    const np = qEl(qEl(s, 'pPr'), 'numPr');
+    raw[qAttr(s, 'styleId')] = {
+      based: qAttr(qEl(s, 'basedOn'), 'val'),
+      numId: np ? qAttr(qEl(np, 'numId'), 'val') : null,
+      ilvl: np ? qAttr(qEl(np, 'ilvl'), 'val') : null
+    };
+  }
+  for (const id in raw) {
+    let cur = raw[id], g = 0;
+    while (cur && cur.numId == null && cur.based && g++ < 10) cur = raw[cur.based];
+    if (cur && cur.numId != null) map[id] = { numId: cur.numId, ilvl: cur.ilvl };
+  }
+  return map;
+}
+
+function drawingKind(d) {
+  const has = n => d.getElementsByTagNameNS('*', n).length > 0;
+  if (has('txbxContent')) return 'text';
+  if (has('blip') || has('imagedata')) return 'image';
+  if (has('chart')) return 'chart';
+  return 'other';
+}
+
+/* Texto de un párrafo. Las imágenes se sustituyen por un marcador; el texto
+   de cuadros de texto flotantes (p.ej. "© TODOS OS DIREITOS…") se descarta y
+   se devuelve aparte; mc:Fallback se salta para no leer el contenido duplicado. */
+function readPara(p) {
+  const floating = []; let out = '';
+  (function walk(n) {
+    for (const c of n.childNodes) {
+      if (c.nodeType !== 1) continue;
+      switch (c.localName) {
+        case 'pPr': case 'rPr': case 'Fallback': case 'del': case 'moveFrom': break;
+        case 't': out += c.textContent; break;
+        case 'tab': out += ' '; break;
+        case 'br': case 'cr': out += '\n'; break;
+        case 'noBreakHyphen': out += '-'; break;
+        case 'drawing': case 'pict': case 'object': {
+          const k = drawingKind(c);
+          if (k === 'image') out += ' ' + QCFG.imageText + ' ';
+          else if (k === 'chart') out += ' ' + QCFG.chartText + ' ';
+          else if (k === 'text') floating.push([...c.getElementsByTagNameNS(WNS, 't')].map(t => t.textContent).join(''));
+          break;
+        }
+        default: walk(c);
+      }
+    }
+  })(p);
+  return { text: qClean(out), floating };
+}
+
+function tableRows(tbl) {
+  const rows = [];
+  for (const tr of tbl.children) {
+    if (tr.localName !== 'tr') continue;
+    const cells = [];
+    for (const tc of tr.children) {
+      if (tc.localName !== 'tc') continue;
+      const parts = [];
+      for (const p of tc.children) if (p.localName === 'p') { const t = readPara(p).text; if (t) parts.push(t); }
+      cells.push(parts.join('\n'));
+    }
+    rows.push(cells);
+  }
+  return rows;
+}
+
+function bodyBlocks(node, out) {
+  for (const c of node.children) {
+    if (c.namespaceURI !== WNS) continue;
+    if (c.localName === 'p' || c.localName === 'tbl') out.push(c);
+    else if (c.localName === 'sdt') bodyBlocks(qEl(c, 'sdtContent') || c, out);
+  }
+}
+
+const isGuideTitle = it => it.kind === 'p' && (RX_GUIDE.test(it.text) || /respuesta-titulo|resposta-titulo/i.test(it.style || ''));
+const isOptionItem = it => it.kind === 'p' && it.np && /Letter$/.test(it.np.fmt);
+
+/* Une bloques (párrafos y tablas) en texto plano; las tablas salen como filas con tabuladores. */
+function blocksToText(items, join) {
+  const parts = [];
+  for (const it of items) {
+    if (it.kind === 'tbl') {
+      const t = it.rows.filter(r => r.some(Boolean)).map(r => r.join('\t')).join('\n');
+      if (t) parts.push(t);
+    } else if (it.text) parts.push((it.label ? it.label + ' ' : '') + it.text);
+  }
+  return parts.join(join === undefined ? '\n' : join);
+}
+
+function buildQuestion(cur, n) {
+  const q = { n, type: 'bad', errors: [], warns: [], fields: [] };
+  const its = cur.items;
+  const guideAt = its.findIndex(isGuideTitle);
+  const optAt = its.findIndex(isOptionItem);
+  const tblAt = its.findIndex(i => i.kind === 'tbl');
+
+  const floats = [...cur.first.floating];
+  its.forEach(i => { if (i.floating) floats.push(...i.floating); });
+  [...new Set(floats.map(f => qClean(f)).filter(Boolean))].forEach(f =>
+    q.warns.push('Texto flotante ignorado: «' + (f.length > 45 ? f.slice(0, 45) + '…' : f) + '»'));
+
+  // enunciado; si termina en «(0,75 pontos)» esa puntuación se saca a q.points (info aparte, como los bloques)
+  const stemOf = upto => {
+    const r = blocksToText([{ kind: 'p', text: cur.first.text }, ...its.slice(0, upto)]);
+    const m = RX_POINTS.exec(r);
+    if (!m) return r;
+    q.points = m[1].trim();
+    return r.slice(0, m.index).trim();
+  };
+
+  if (guideAt >= 0) {                                   // ── ENSAYO
+    q.type = 'essay';
+    const stem = stemOf(guideAt);
+    const fb = blocksToText(its.slice(guideAt + 1));
+    if (!stem) q.errors.push('El enunciado está vacío.');
+    if (!fb) q.warns.push('La guía de respuesta está vacía.');
+    q.fields = [{ label: 'Enunciado', text: stem }, { label: 'Retroalimentación', text: fb }];
+  } else if (optAt >= 0) {                              // ── OPCIÓN MÚLTIPLE / VERDADERO O FALSO
+    if (tblAt >= 0 && tblAt < optAt) q.errors.push('Hay una tabla antes de las opciones: estructura mezclada.');
+    const stem = stemOf(optAt);
+    if (!stem) q.errors.push('El enunciado está vacío.');
+    const opts = [];
+    for (const it of its.slice(optAt)) {
+      if (isOptionItem(it)) opts.push({ value: it.np.value, title: it.text, fb: [] });
+      else if (it.kind === 'tbl' || it.text) opts[opts.length - 1].fb.push(it);
+    }
+    if (opts.length < 2) q.errors.push('Solo hay ' + opts.length + ' opción(es); se esperan al menos 2.');
+    opts.forEach((o, i) => {
+      if (o.value !== i + 1) q.errors.push('Salto en las letras de las opciones: en la posición ' + (i + 1) + ' aparece «' + letterOf(o.value) + ')» y se esperaba «' + letterOf(i + 1) + ')».');
+    });
+    opts.forEach((o, i) => {
+      const L = letterOf(i + 1) + ')';
+      // El texto de la opción puede ocupar varios párrafos y la marca CORRETA./INCORRETA. puede ir al
+      // final de uno de ellos. Se busca la PRIMERA marca entre la opción y la siguiente: lo anterior es
+      // el título y desde la marca hasta la siguiente opción es la retroalimentación (tal cual).
+      // Marca válida: en MAYÚSCULAS en cualquier punto, o (en cualquier caso) al inicio de un párrafo
+      // posterior o de una línea. Si no hay marca, título = la opción y retroalimentación = lo demás.
+      const pieces = [o.title, ...o.fb.map(it => blocksToText([it]))];
+      let hit = -1, cut = 0;
+      for (let k = 0; k < pieces.length && hit < 0; k++) {
+        const p = pieces[k], m1 = RX_MARK_INLINE.exec(p);
+        if (m1) { hit = k; cut = m1.index + m1[0].length - m1[1].length; }
+        else if (k > 0 && RX_MARK.test(p)) { hit = k; cut = 0; }
+        else { const mm = /\n\s*((?:IN)?CORR(?:ETA|ECTA|ECT|ECTE|ETO|ECTO)\b)/i.exec(p); if (mm) { hit = k; cut = mm.index + mm[0].length - mm[1].length; } }
+      }
+      let raw;
+      if (hit < 0) raw = pieces.slice(1).filter(Boolean).join(QCFG.optionFeedbackJoin).trim();
+      else {
+        o.title = [...pieces.slice(0, hit), pieces[hit].slice(0, cut)].map(x => x.trim()).filter(Boolean).join(' ');
+        raw = [pieces[hit].slice(cut).trim(), ...pieces.slice(hit + 1)].filter(Boolean).join(QCFG.optionFeedbackJoin).trim();
+      }
+      o.fbText = raw;
+      const m = RX_MARK.exec(raw);          // solo informativo (etiqueta verde/roja); no es obligatorio
+      o.correct = m ? !m[1] : null;
+      if (!o.title) q.warns.push('La opción ' + L + ' no tiene texto (¿había un cuadro de texto o una imagen?).');
+    });
+    const A = opts[0] && opts[0].title, B = opts[1] && opts[1].title;
+    const isTF = opts.length === 2 && ((RX_TRUE.test(A) && RX_FALSE.test(B)) || (RX_FALSE.test(A) && RX_TRUE.test(B)));
+    q.type = isTF ? 'tf' : 'mc';
+    if (!q.errors.length) {
+      const tag = o => o.correct === null ? null : o.correct ? 'correcta' : 'incorrecta';
+      if (isTF) {
+        q.fields = [
+          { label: 'Enunciado', text: stem },
+          { label: 'Opción 1', text: opts[0].title },
+          { label: 'Opción 2', text: opts[1].title },
+          { label: 'Retroalimentación 1', text: opts[0].fbText, tag: tag(opts[0]) },
+          { label: 'Retroalimentación 2', text: opts[1].fbText, tag: tag(opts[1]) }
+        ];
+      } else {
+        q.fields = [{ label: 'Enunciado', text: stem }];
+        opts.forEach((o, i) => {
+          const L = letterOf(i + 1);
+          q.fields.push({ label: 'Opción ' + L + ' · título', text: o.title });
+          q.fields.push({ label: 'Opción ' + L + ' · retroalimentación', text: o.fbText, tag: tag(o) });
+        });
+      }
+    }
+  } else if (tblAt >= 0) {                              // ── COMBINATORIA
+    q.type = 'comb';
+    const stem = stemOf(tblAt);
+    if (!stem) q.errors.push('El enunciado está vacío.');
+    // una tabla partida por un salto de página llega como varias tablas seguidas: se unen en una sola
+    const tbls = its.filter(i => i.kind === 'tbl');
+    if (tbls.length > 1) q.warns.push('La tabla estaba partida en ' + tbls.length + ' partes (¿salto de página?): se han unido.');
+    if (its.slice(tblAt + 1).some(i => i.kind === 'p' && i.text)) q.warns.push('Hay texto entre o después de las tablas que se ha ignorado.');
+    const pairs = [];
+    tbls.flatMap(t => t.rows).forEach((r, ri) => {
+      const cell = s => (s || '').replace(/\n+/g, ' ').trim();
+      const title = cell(r[0]), pair = r.slice(1).map(cell).filter(Boolean).join(' ');
+      if (!title && !pair) return;
+      if (r.length < 2) q.errors.push('La fila ' + (ri + 1) + ' de la tabla tiene una sola columna.');
+      else if (!title || !pair) q.warns.push('La fila ' + (ri + 1) + ' de la tabla está incompleta.');
+      pairs.push({ title, pair });
+    });
+    if (pairs.length < 2) q.errors.push('La tabla tiene menos de 2 filas con contenido.');
+    if (!q.errors.length) {
+      q.fields = [{ label: 'Enunciado', text: stem }];
+      pairs.forEach((p, i) => {
+        q.fields.push({ label: 'Apartado ' + (i + 1) + ' · título', text: p.title });
+        q.fields.push({ label: 'Apartado ' + (i + 1) + ' · pareja', text: p.pair });
+      });
+    }
+  } else {                                              // ── ENSAYO SIN RETROALIMENTACIÓN (solo enunciado)
+    q.type = 'essay';
+    const stem = stemOf(its.length);
+    if (!stem) q.errors.push('El enunciado está vacío.');
+    q.fields = [{ label: 'Enunciado', text: stem }];
+  }
+  if (q.errors.length) q.fields = [];
+  return q;
+}
+
+async function parseDocxQuestions(buf) {
+  if (typeof JSZip === 'undefined') throw new Error('JSZip no está cargado');
+  const zip = await JSZip.loadAsync(buf);
+  const read = async n => { const f = zip.file(n); return f ? f.async('string') : null; };
+  const docXml = await read('word/document.xml');
+  if (!docXml) throw new Error('El archivo no contiene word/document.xml');
+  const dp = new DOMParser();
+  const toDom = s => dp.parseFromString(s, 'application/xml');
+  const doc = toDom(docXml);
+  if (doc.getElementsByTagName('parsererror').length) throw new Error('No se pudo leer el XML del documento');
+  const numbering = parseNumbering(await read('word/numbering.xml'), toDom);
+  const styleNums = parseStyleNums(await read('word/styles.xml'), toDom);
+  const body = doc.getElementsByTagNameNS(WNS, 'body')[0];
+  if (!body) throw new Error('Documento sin cuerpo');
+
+  // contadores de listas (por definición abstracta, como hace Word)
+  const counters = {}, seenNum = new Set();
+  function bump(numId, lvl) {
+    const n = numbering.num[numId];
+    if (!n) return { fmt: 'decimal', value: 1, abs: 'x' + numId };
+    const cs = counters[n.abs] || (counters[n.abs] = []);
+    if (!seenNum.has(numId)) { seenNum.add(numId); for (const l in n.overrides) cs[l] = undefined; }
+    const lv = (numbering.abs[n.abs] || {})[lvl] || { fmt: 'decimal', start: 1 };
+    const start = n.overrides[lvl] !== undefined ? n.overrides[lvl] : lv.start;
+    cs[lvl] = cs[lvl] === undefined ? start : cs[lvl] + 1;
+    for (let k = lvl + 1; k < 9; k++) cs[k] = undefined;
+    return { fmt: lv.fmt, value: cs[lvl], abs: n.abs };
+  }
+
+  const blocks = []; bodyBlocks(body, blocks);
+  const items = [];
+  for (const b of blocks) {
+    if (b.localName === 'tbl') { items.push({ kind: 'tbl', rows: tableRows(b) }); continue; }
+    const pPr = qEl(b, 'pPr');
+    const style = qAttr(qEl(pPr, 'pStyle'), 'val') || '';
+    const npEl = qEl(pPr, 'numPr');
+    let numId = npEl ? qAttr(qEl(npEl, 'numId'), 'val') : null;
+    let ilvl = npEl ? qAttr(qEl(npEl, 'ilvl'), 'val') : null;
+    if (numId == null && styleNums[style]) { numId = styleNums[style].numId; if (ilvl == null) ilvl = styleNums[style].ilvl; }
+    const { text, floating } = readPara(b);
+    const it = { kind: 'p', text, floating, style, np: null, label: '' };
+    if (numId != null && numId !== '0') {
+      const lvl = +(ilvl || 0), r = bump(numId, lvl);
+      it.np = { fmt: r.fmt, lvl, value: r.value, abs: r.abs };
+      it.label = r.fmt === 'bullet' ? '•' : /Letter$/.test(r.fmt)
+        ? (r.fmt.startsWith('upper') ? letterOf(r.value).toUpperCase() : letterOf(r.value)) + ')'
+        : /^decimal/.test(r.fmt) ? r.value + '.' : '';
+    }
+    items.push(it);
+  }
+
+  // reparto en preguntas
+  const questions = [], preface = [], docWarnings = [], blockNotes = [];
+  let cur = null, mainAbs = null, last = 0;
+  const mkBad = (k, msg) => ({ n: k, type: 'missing', errors: [msg], warns: [], fields: [] });
+  function closeCur() {
+    if (!cur) return;
+    const expected = last + 1; let idx = cur.shown, extra = null;
+    if (idx > expected) {
+      for (let k = expected; k < idx; k++) {
+        questions.push(mkBad(k, 'Falta la pregunta #' + k + ': la numeración ' + (last ? 'salta de #' + last + ' a #' + idx : 'empieza en #' + idx) +
+          '. Es probable que esté en un encabezado o cuadro de texto.'));
+      }
+    } else if (idx < expected) {
+      extra = 'Numeración repetida o reiniciada: el documento muestra #' + idx + ' y se esperaba #' + expected + '.';
+      idx = expected;
+    }
+    const q = buildQuestion(cur, idx);
+    if (extra) { q.errors.unshift(extra); q.fields = []; }
+    questions.push(q); last = idx; cur = null;
+  }
+  for (const it of items) {
+    const isQ = it.kind === 'p' && it.np && /^decimal/.test(it.np.fmt) && it.np.lvl === 0 &&
+      !(cur && cur.guide && mainAbs !== null && it.np.abs !== mainAbs);
+    if (isQ) {
+      closeCur();
+      if (mainAbs === null) mainAbs = it.np.abs;
+      cur = { shown: it.np.value, first: it, items: [], guide: false };
+      continue;
+    }
+    if (it.kind === 'p' && it.text && !isOptionItem(it) && RX_BLOCK.test(it.text)) {
+      blockNotes.push({ text: it.text, before: (cur ? cur.shown : last) + 1 });   // se aplica a la pregunta siguiente
+      continue;
+    }
+    if (!cur) {
+      if (it.kind === 'p' && it.text) preface.push(it.text);
+      if (isOptionItem(it)) docWarnings.push('Hay una opción («' + it.text.slice(0, 30) + '») antes de la primera pregunta.');
+      continue;
+    }
+    if (isGuideTitle(it)) cur.guide = true;
+    cur.items.push(it);
+  }
+  closeCur();
+
+  const bad = questions.filter(q => q.errors.length).length;
+  const warn = questions.filter(q => !q.errors.length && q.warns.length).length;
+  return { total: last, questions, preface, docWarnings, blocks: blockNotes, bad, warn };
+}
+
+/* ════════════════════════════════════════════════════════════════
+   MÓDULO 3 · MOODLE XML
+   ════════════════════════════════════════════════════════════════
+   Convención (la de tu XML de ejemplo):
+     nombre    →  CÓDIGO-IDIOMA-X{mod}-{tipo}-{nº 3 cifras}      p.ej. MM093-POR-X1-Auto-008
+     categoría →  $course$/top/{idioma}/{carpeta}[/Bloque N]
+   Cambia TIPOS / FOLDERS / LANGS para añadir tipos de cuestionario, carpetas o idiomas.
+   ════════════════════════════════════════════════════════════════ */
+const TIPOS = ['Auto', 'Reflex', 'E0', 'R1', 'R2'];
+const FOLDERS = { Auto: 'autoevaluacion', Reflex: 'reflex', E0: 'examen', R1: 'recuperacion 1', R2: 'recuperacion 2' };
+const LANGS = { ESP: 'Español', POR: 'Portugués', ENG: 'Inglés', FRA: 'Francés' };
+const SKEY = 'quizhub_settings';
+let docs = [];
+
+const xe = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const cd = s => '<![CDATA[' + String(s).replace(/\]\]>/g, ']]]]><![CDATA[>') + ']]>';
+const htmlOf = t => String(t || '').split('\n').map(l => l.trim()).filter(Boolean).map(l => '<p>' + xe(l) + '</p>').join('\r\n');
+const tx = (tag, h) => '    <' + tag + ' format="html">\n      <text>' + (h ? cd(h) : '') + '</text>\n    </' + tag + '>\n';
+const FB = tx('correctfeedback', '<p>Respuesta correcta</p>') + tx('partiallycorrectfeedback', '<p>Respuesta parcialmente correcta.</p>') +
+  tx('incorrectfeedback', '<p>Respuesta incorrecta.</p>') + '    <shownumcorrect/>\n';
+
+function qHead(type, name, stem, general) {
+  return '  <question type="' + type + '">\n    <name>\n      <text>' + xe(name) + '</text>\n    </name>\n' +
+    tx('questiontext', htmlOf(stem)) + tx('generalfeedback', htmlOf(general));
+}
+const GRADE = '    <defaultgrade>1.0000000</defaultgrade>\n    <penalty>0.3333333</penalty>\n    <hidden>0</hidden>\n    <idnumber></idnumber>\n';
+
+/* A partir de los campos que ya extrae el lector (q.fields) se arma cada pregunta. */
+function qXml(q, name, single) {
+  const F = q.fields;
+  if (q.type === 'mc' || q.type === 'tf') {
+    const opts = [];
+    if (q.type === 'tf') { opts.push({ t: F[1].text, fb: F[3].text, tag: F[3].tag }, { t: F[2].text, fb: F[4].text, tag: F[4].tag }); }
+    else for (let i = 1; i + 1 < F.length; i += 2) opts.push({ t: F[i].text, fb: F[i + 1].text, tag: F[i + 1].tag });
+    const nc = opts.filter(o => o.tag === 'correcta').length;
+    if (!nc) return { err: 'Ninguna opción está marcada como CORRETA.' };
+    const fr = nc === 1 ? '100' : (100 / nc).toFixed(5);
+    let warn = opts.some(o => !o.tag) ? 'Hay opciones sin marca CORRETA/INCORRETA: se han tratado como incorrectas.' : '';
+    if (nc > 1) warn += ' Hay ' + nc + ' correctas: cada una vale ' + fr + '%.';
+    let x = qHead('multichoice', name, F[0].text, '') + GRADE + '    <single>' + (single && nc === 1) + '</single>\n    <shuffleanswers>false</shuffleanswers>\n' +
+      '    <answernumbering>abc</answernumbering>\n    <showstandardinstruction>0</showstandardinstruction>\n' + FB;
+    opts.forEach(o => {
+      x += '    <answer fraction="' + (o.tag === 'correcta' ? fr : '0') + '" format="html">\n      <text>' + cd(htmlOf(o.t)) + '</text>\n' + tx('feedback', htmlOf(o.fb)).replace(/^ {4}/gm, '      ') + '    </answer>\n';
+    });
+    return { xml: x + '  </question>\n\n', warn: warn.trim() };
+  }
+  if (q.type === 'comb') {
+    const subs = [];
+    for (let i = 1; i + 1 < F.length; i += 2) if (F[i].text && F[i + 1].text) subs.push({ t: F[i].text, a: F[i + 1].text });
+    if (subs.length < 2) return { err: 'La tabla necesita al menos 2 filas con apartado y pareja.' };
+    let x = qHead('matching', name, F[0].text, '') + GRADE + '    <shuffleanswers>true</shuffleanswers>\n' + FB;
+    subs.forEach(s => { x += '    <subquestion format="html">\n      <text>' + cd(htmlOf(s.t)) + '</text>\n      <answer>\n        <text>' + xe(s.a.replace(/\s+/g, ' ')) + '</text>\n      </answer>\n    </subquestion>\n'; });
+    return { xml: x + '  </question>\n\n' };
+  }
+  if (q.type === 'essay') {
+    const fb = F[1] ? F[1].text : '';
+    return {
+      xml: qHead('essay', name, F[0].text, fb) + '    <defaultgrade>1.0000000</defaultgrade>\n    <penalty>0.0000000</penalty>\n    <hidden>0</hidden>\n    <idnumber></idnumber>\n' +
+        '    <responseformat>editor</responseformat>\n    <responserequired>1</responserequired>\n    <responsefieldlines>10</responsefieldlines>\n    <minwordlimit></minwordlimit>\n    <maxwordlimit></maxwordlimit>\n' +
+        '    <attachments>0</attachments>\n    <attachmentsrequired>0</attachmentsrequired>\n    <maxbytes>0</maxbytes>\n    <filetypeslist></filetypeslist>\n' + tx('graderinfo', '') + tx('responsetemplate', '') + '  </question>\n\n'
+    };
+  }
+  return { err: 'Tipo de pregunta no reconocido.' };
+}
+
+const blockName = t => { const m = /^\s*(?:bloque|bloco|block|bloc)\s*(\d+)/i.exec(t); return m ? 'Bloque ' + m[1] : 'Bloque Común'; };
+function guessTipo(n) {
+  if (/reflex/i.test(n)) return 'Reflex';
+  if (/rec02/i.test(n)) return 'R2';
+  if (/rec01/i.test(n)) return 'R1';
+  if (/test|tarea/i.test(n)) return 'Auto';
+  if (/(?<![A-Za-z])ex(?![a-z])/i.test(n)) return 'E0';
+  return '';
+}
+
+function buildModel() {
+  const code = $('#code').value.trim().toUpperCase(), lang = $('#lang').value, rev = parseInt($('#rev').value, 10) || 1, single = $('#single').checked;
+  const rows = [];
+  docs.filter(d => d.parsed && d.tipo)
+    .sort((a, b) => TIPOS.indexOf(a.tipo) - TIPOS.indexOf(b.tipo) || a.name.localeCompare(b.name, 'es', { numeric: true }))
+    .forEach(d => d.parsed.questions.forEach(q => {
+      let bk = null; (d.parsed.blocks || []).forEach(b => { if (b.before <= q.n) bk = b; });
+      const name = [code || 'CODIGO', lang, 'X' + rev, d.tipo, String(q.n).padStart(3, '0')].join('-');
+      const cat = '$course$/top/' + lang.toLowerCase() + '/' + (d.folder || FOLDERS[d.tipo]) + (bk ? '/' + blockName(bk.text) : '');
+      const r = { doc: d.name, n: q.n, type: q.type, name, cat, warns: q.warns.slice(), err: null, xml: '' };
+      if (q.errors.length) r.err = q.errors.join(' ');
+      else {
+        const x = qXml(q, name, single);
+        if (x.err) r.err = x.err; else { r.xml = x.xml; if (x.warn) r.warns.push(x.warn); }
+      }
+      if (!r.err && q.fields.some(f => /<<Aquí hay un/.test(f.text))) r.warns.push('Contiene una imagen o gráfico: no se incluye en el XML.');
+      rows.push(r);
+    }));
+  const cnt = {}; rows.forEach(r => { cnt[r.name] = (cnt[r.name] || 0) + 1; });
+  rows.forEach(r => { if (cnt[r.name] > 1) r.warns.push('Nombre repetido (¿dos documentos del mismo tipo?).'); });
+  return { rows, code, lang, rev };
+}
+
+const catXml = c => '<!-- question: 0  -->\n  <question type="category">\n    <category>\n      <text>' + xe(c) + '</text>\n    </category>\n    <info format="html">\n      <text></text>\n    </info>\n    <idnumber></idnumber>\n  </question>\n\n';
+function buildXml(rows) {
+  let out = '<?xml version="1.0" encoding="UTF-8"?>\n<quiz>\n', cur = null; const seen = new Set();
+  rows.filter(r => !r.err).forEach(r => {
+    if (r.cat !== cur) {
+      const p = r.cat.split('/');
+      for (let i = 3; i <= p.length; i++) { const c = p.slice(0, i).join('/'); if (!seen.has(c) || (i === p.length)) { out += catXml(c); seen.add(c); } }
+      cur = r.cat;
+    }
+    out += r.xml;
+  });
+  return out + '</quiz>\n';
+}
+
+/* ── carga de archivos ── */
+async function addDoc(name, buf) {
+  const base = name.split('/').pop().replace(/\.docx$/i, '');
+  docs = docs.filter(d => d.name !== base);
+  const d = { name: base, parsed: null, err: null, tipo: guessTipo(base), folder: '' };
+  try { d.parsed = await parseDocxQuestions(buf); } catch (e) { d.err = e && e.message || String(e); }
+  docs.push(d);
+}
+async function addFiles(files) {
+  for (const f of files) {
+    if (/\.zip$/i.test(f.name)) {
+      try {
+        const z = await JSZip.loadAsync(await f.arrayBuffer());
+        const names = Object.keys(z.files).filter(n => /\.docx$/i.test(n) && !z.files[n].dir && !/(^|\/)~\$/.test(n) && !/__MACOSX/.test(n));
+        if (!names.length) $('#msg').textContent = 'El zip «' + f.name + '» no contiene ningún .docx.';
+        for (const n of names) await addDoc(n, await z.files[n].async('arraybuffer'));
+      } catch (e) { $('#msg').textContent = 'No se pudo abrir «' + f.name + '»: ' + (e && e.message || e); }
+    } else if (/\.docx$/i.test(f.name)) await addDoc(f.name, await f.arrayBuffer());
+  }
+  docs.sort((a, b) => a.name.localeCompare(b.name, 'es', { numeric: true }));
+  renderDocs();
+}
+
+/* ── interfaz ── */
+function renderDocs() {
+  $('#docs').innerHTML = docs.map((d, i) => {
+    const p = d.parsed;
+    const info = d.err ? '<b style="color:var(--bad)">No se pudo leer: ' + esc(d.err) + '</b>'
+      : p.total + ' preguntas' + (p.bad ? ' · <b style="color:var(--bad)">' + p.bad + ' no tratables</b>' : '') + (p.warn ? ' · ' + p.warn + ' con avisos' : '') + (d.tipo ? '' : ' · <b style="color:var(--accent)">elige el tipo para incluirlo</b>');
+    return '<div class="doc-row"><div class="nm" title="' + esc(d.name) + '">' + esc(d.name) + '</div>' +
+      '<select data-i="' + i + '" data-k="tipo"><option value="">— tipo —</option>' + TIPOS.map(t => '<option' + (t === d.tipo ? ' selected' : '') + '>' + t + '</option>').join('') + '</select>' +
+      '<input type="text" data-i="' + i + '" data-k="folder" placeholder="' + esc(FOLDERS[d.tipo] || 'carpeta') + '" value="' + esc(d.folder) + '">' +
+      '<div class="sub">' + info + ' <button class="btn sm" data-rm="' + i + '">Quitar</button></div></div>';
+  }).join('');
+  renderPreview();
+}
+function renderPreview() {
+  const m = buildModel(), ok = m.rows.filter(r => !r.err), bad = m.rows.length - ok.length;
+  const nw = ok.filter(r => r.warns.length).length, cats = new Set(ok.map(r => r.cat)).size;
+  $('#sum').innerHTML = !m.rows.length ? 'Aún no hay preguntas: abre un .zip o varios .docx (y elige el tipo de cada uno).'
+    : '<b>' + ok.length + '</b> preguntas exportables en <b>' + cats + '</b> categorías' + (bad ? ' · <b style="color:var(--bad)">' + bad + ' no exportables (se omiten)</b>' : '') + (nw ? ' · ' + nw + ' con avisos' : '') +
+    '<br>Se pierde el formato del Word (cursivas, negritas, sub/superíndices) y las imágenes: el lector solo conserva el texto.';
+  $('#prev').innerHTML = m.rows.length ? '<table class="prev"><tr><th>Nombre</th><th>Tipo</th><th>Categoría</th><th>Estado</th></tr>' + m.rows.map(r =>
+    '<tr><td>' + esc(r.name) + '</td><td>' + esc((QTYPES[r.type] || QTYPES.bad).short) + '</td><td>' + esc(r.cat.replace('$course$/top/', '')) + '</td><td>' +
+    (r.err ? '<span class="qtag bad">error</span> ' + esc(r.err) : r.warns.length ? '<span class="qtag warn">aviso</span> ' + esc(r.warns.join(' ')) : '<span class="qtag">ok</span>') + '</td></tr>').join('') + '</table>' : '';
+  $('#gen').disabled = $('#copy').disabled = !ok.length;
+}
+function saveSettings() { try { localStorage.setItem(SKEY, JSON.stringify({ code: $('#code').value, lang: $('#lang').value, rev: $('#rev').value, single: $('#single').checked })); } catch (e) {} }
+function makeXml() {
+  const m = buildModel(), ok = m.rows.filter(r => !r.err);
+  if (!m.code) { $('#msg').textContent = 'Escribe el código de asignatura (p. ej. MM093).'; return null; }
+  if (!ok.length) { $('#msg').textContent = 'No hay preguntas exportables.'; return null; }
+  return { xml: buildXml(m.rows), n: ok.length, m };
+}
+$('#gen').addEventListener('click', () => {
+  const r = makeXml(); if (!r) return;
+  const t = new Date(), p = n => String(n).padStart(2, '0');
+  const name = $('#fname').value.trim() || ('preguntas-' + r.m.code + '-' + r.m.lang.toLowerCase() + '-' + t.getFullYear() + p(t.getMonth() + 1) + p(t.getDate()) + '-' + p(t.getHours()) + p(t.getMinutes()) + '.xml');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([r.xml], { type: 'application/xml' })); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  $('#msg').textContent = '✓ ' + name + ': ' + r.n + ' preguntas. En Moodle: Banco de preguntas → Importar → formato «Moodle XML».';
+});
+$('#copy').addEventListener('click', async () => { const r = makeXml(); if (!r) return; await copyText(r.xml); $('#msg').textContent = '✓ XML copiado (' + r.n + ' preguntas).'; });
+$('#open').addEventListener('click', () => $('#file').click());
+$('#file').addEventListener('change', e => { addFiles([...e.target.files]); e.target.value = ''; });
+const dropEl = $('#drop');
+dropEl.addEventListener('click', () => $('#file').click());
+['dragenter', 'dragover'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); dropEl.classList.add('hot'); }));
+['dragleave', 'drop'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); dropEl.classList.remove('hot'); }));
+document.addEventListener('drop', e => { if (e.dataTransfer && e.dataTransfer.files.length) addFiles([...e.dataTransfer.files]); });
+$('#docs').addEventListener('input', e => { const t = e.target, i = t.dataset.i; if (i === undefined) return; docs[i][t.dataset.k] = t.value; if (t.dataset.k === 'tipo') renderDocs(); else renderPreview(); });
+$('#docs').addEventListener('click', e => { const i = e.target.dataset.rm; if (i === undefined) return; docs.splice(+i, 1); renderDocs(); });
+$('#lang').innerHTML = Object.keys(LANGS).map(k => '<option value="' + k + '">' + LANGS[k] + ' (' + k + ')</option>').join('');
+try { const s = JSON.parse(localStorage.getItem(SKEY) || 'null'); if (s) { $('#code').value = s.code || ''; $('#lang').value = s.lang || 'ESP'; $('#rev').value = s.rev || 1; $('#single').checked = !!s.single; } } catch (e) {}
+['#code', '#lang', '#rev', '#single'].forEach(id => $(id).addEventListener('input', () => { saveSettings(); renderPreview(); }));
+renderDocs();
+</script>
+</body>
+</html>
