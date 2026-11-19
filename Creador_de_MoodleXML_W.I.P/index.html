@@ -82,8 +82,14 @@ table.prev th{font:11px var(--font-mono);color:var(--text-3);text-transform:uppe
   <div class="card">
     <div class="section-title">Moodle XML</div>
     <div class="field"><label for="fname">Nombre del archivo (opcional)</label><input type="text" id="fname" placeholder="preguntas-CÓDIGO-idioma-AAAAMMDD-HHMM.xml"></div>
-    <div class="btns"><button class="btn go" id="gen" disabled>Generar y descargar XML</button><button class="btn" id="copy" disabled>Copiar XML</button></div>
-    <div class="hint" id="msg"></div>
+    <div class="btns"><button class="btn go" id="gen">Generar y descargar XML</button><button class="btn" id="copy">Copiar XML</button></div>
+    <div id="msg" style="margin-top:.8rem"></div>
+    <div id="outbox" style="display:none;margin-top:.8rem">
+      <label for="xmlout">XML generado</label>
+      <textarea id="xmlout" readonly rows="8" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font:11px/1.5 var(--font-mono);padding:10px 12px;resize:vertical"></textarea>
+      <div class="btns" style="margin-top:.5rem"><button class="btn sm" id="xcopy">Copiar</button><button class="btn sm" id="xsel">Seleccionar todo</button></div>
+      <div class="hint">Si la descarga no arranca (algunos navegadores o visores la bloquean), copia este texto y pégalo en un archivo nuevo con extensión .xml, codificación UTF-8.</div>
+    </div>
   </div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.2/jszip.min.js"></script>
@@ -486,6 +492,7 @@ const TIPOS = ['Auto', 'Reflex', 'E0', 'R1', 'R2'];
 const FOLDERS = { Auto: 'autoevaluacion', Reflex: 'reflex', E0: 'examen', R1: 'recuperacion 1', R2: 'recuperacion 2' };
 const LANGS = { ESP: 'Español', POR: 'Portugués', ENG: 'Inglés', FRA: 'Francés' };
 const SKEY = 'quizhub_settings';
+const say = (t, k) => { const m = $('#msg'); m.className = t ? 'q-alert ' + (k || 'info') : ''; m.textContent = t || ''; };
 let docs = [];
 
 const xe = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -600,9 +607,9 @@ async function addFiles(files) {
       try {
         const z = await JSZip.loadAsync(await f.arrayBuffer());
         const names = Object.keys(z.files).filter(n => /\.docx$/i.test(n) && !z.files[n].dir && !/(^|\/)~\$/.test(n) && !/__MACOSX/.test(n));
-        if (!names.length) $('#msg').textContent = 'El zip «' + f.name + '» no contiene ningún .docx.';
+        if (!names.length) say('El zip «' + f.name + '» no contiene ningún .docx.', 'bad');
         for (const n of names) await addDoc(n, await z.files[n].async('arraybuffer'));
-      } catch (e) { $('#msg').textContent = 'No se pudo abrir «' + f.name + '»: ' + (e && e.message || e); }
+      } catch (e) { say('No se pudo abrir «' + f.name + '»: ' + (e && e.message || e), 'bad'); }
     } else if (/\.docx$/i.test(f.name)) await addDoc(f.name, await f.arrayBuffer());
   }
   docs.sort((a, b) => a.name.localeCompare(b.name, 'es', { numeric: true }));
@@ -631,24 +638,48 @@ function renderPreview() {
   $('#prev').innerHTML = m.rows.length ? '<table class="prev"><tr><th>Nombre</th><th>Tipo</th><th>Categoría</th><th>Estado</th></tr>' + m.rows.map(r =>
     '<tr><td>' + esc(r.name) + '</td><td>' + esc((QTYPES[r.type] || QTYPES.bad).short) + '</td><td>' + esc(r.cat.replace('$course$/top/', '')) + '</td><td>' +
     (r.err ? '<span class="qtag bad">error</span> ' + esc(r.err) : r.warns.length ? '<span class="qtag warn">aviso</span> ' + esc(r.warns.join(' ')) : '<span class="qtag">ok</span>') + '</td></tr>').join('') + '</table>' : '';
-  $('#gen').disabled = $('#copy').disabled = !ok.length;
 }
 function saveSettings() { try { localStorage.setItem(SKEY, JSON.stringify({ code: $('#code').value, lang: $('#lang').value, rev: $('#rev').value, single: $('#single').checked })); } catch (e) {} }
 function makeXml() {
   const m = buildModel(), ok = m.rows.filter(r => !r.err);
-  if (!m.code) { $('#msg').textContent = 'Escribe el código de asignatura (p. ej. MM093).'; return null; }
-  if (!ok.length) { $('#msg').textContent = 'No hay preguntas exportables.'; return null; }
+  if (!docs.length) { say('Primero abre un .zip o varios .docx.', 'bad'); return null; }
+  if (!m.code) { say('Escribe el código de asignatura (p. ej. MM093) en Ajustes.', 'bad'); return null; }
+  if (!ok.length) {
+    const sin = docs.filter(d => !d.tipo).length;
+    say(sin ? 'Hay ' + sin + ' documento(s) sin tipo: elige Auto, E0, R1… en cada uno.' : 'No hay preguntas exportables: revisa los errores de la tabla.', 'bad'); return null;
+  }
   return { xml: buildXml(m.rows), n: ok.length, m };
 }
-$('#gen').addEventListener('click', () => {
+/* Guardado: 1) diálogo «Guardar como» del navegador, 2) descarga con enlace, 3) el recuadro de texto siempre queda a mano */
+async function saveFile(name, text) {
+  if (window.showSaveFilePicker) {
+    try {
+      const h = await window.showSaveFilePicker({ suggestedName: name, types: [{ description: 'Moodle XML', accept: { 'application/xml': ['.xml'] } }] });
+      const w = await h.createWritable(); await w.write(text); await w.close(); return 'picker';
+    } catch (e) { if (e && e.name === 'AbortError') return 'cancel'; }
+  }
+  try {
+    const blob = new Blob([text], { type: 'application/xml;charset=utf-8' });
+    if (navigator.msSaveBlob) { navigator.msSaveBlob(blob, name); return 'anchor'; }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.style.display = 'none';
+    document.body.appendChild(a); a.click(); setTimeout(() => { a.remove(); URL.revokeObjectURL(a.href); }, 10000);
+    return 'anchor';
+  } catch (e) { return 'fail'; }
+}
+function showOut(xml) { $('#xmlout').value = xml; $('#outbox').style.display = 'block'; }
+$('#gen').addEventListener('click', async () => {
   const r = makeXml(); if (!r) return;
   const t = new Date(), p = n => String(n).padStart(2, '0');
   const name = $('#fname').value.trim() || ('preguntas-' + r.m.code + '-' + r.m.lang.toLowerCase() + '-' + t.getFullYear() + p(t.getMonth() + 1) + p(t.getDate()) + '-' + p(t.getHours()) + p(t.getMinutes()) + '.xml');
-  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([r.xml], { type: 'application/xml' })); a.download = name;
-  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-  $('#msg').textContent = '✓ ' + name + ': ' + r.n + ' preguntas. En Moodle: Banco de preguntas → Importar → formato «Moodle XML».';
+  showOut(r.xml);
+  const how = await saveFile(name, r.xml);
+  say(how === 'cancel' ? 'Guardado cancelado. El XML sigue aquí abajo por si lo quieres copiar.'
+    : '✓ ' + name + ' · ' + r.n + ' preguntas. Si no ves la descarga, copia el XML del recuadro de abajo. En Moodle: Banco de preguntas → Importar → «Moodle XML».', how === 'fail' ? 'bad' : 'info');
 });
-$('#copy').addEventListener('click', async () => { const r = makeXml(); if (!r) return; await copyText(r.xml); $('#msg').textContent = '✓ XML copiado (' + r.n + ' preguntas).'; });
+
+$('#copy').addEventListener('click', async () => { const r = makeXml(); if (!r) return; showOut(r.xml); await copyText(r.xml); say('✓ XML copiado (' + r.n + ' preguntas).', 'info'); });
+$('#xcopy').addEventListener('click', async () => { await copyText($('#xmlout').value); say('✓ XML copiado.', 'info'); });
+$('#xsel').addEventListener('click', () => { $('#xmlout').focus(); $('#xmlout').select(); });
 $('#open').addEventListener('click', () => $('#file').click());
 $('#file').addEventListener('change', e => { addFiles([...e.target.files]); e.target.value = ''; });
 const dropEl = $('#drop');
