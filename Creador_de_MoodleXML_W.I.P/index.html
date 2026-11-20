@@ -50,6 +50,18 @@ table.prev th{font:11px var(--font-mono);color:var(--text-3);text-transform:uppe
 .scroll{max-height:420px;overflow:auto;margin-top:.7rem}
 .sum{font:12.5px/1.6 var(--font-ui);color:var(--text-2)}.sum b{color:var(--accent)}
 .btns{display:flex;gap:8px;flex-wrap:wrap}
+.scroll{max-height:620px}
+tr.qr{cursor:pointer}tr.qr:hover td{background:var(--surface-2)}tr.qr.sel td{background:var(--accent-dim)}
+td.mk{color:var(--accent);width:18px}
+.det{padding:8px 2px}.dmeta{font:11.5px var(--font-mono);color:var(--text-3);margin-bottom:.6rem}
+.fld{margin-bottom:.5rem}.fl{font:11px var(--font-mono);color:var(--text-2);margin-bottom:3px}
+.ft{font:13px/1.5 var(--font-ui);white-space:pre-wrap;word-break:break-word;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 10px}
+.ft mark{background:var(--accent);color:#000;border-radius:3px;padding:0 3px}
+.chip{font:10px var(--font-mono);border-radius:4px;padding:0 5px;border:1px solid}.chip.ok{color:var(--good);border-color:var(--good)}.chip.ko{color:var(--bad);border-color:var(--bad)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:.3rem 0 .6rem}
+.chipbtn{background:var(--surface-2);border:1px solid var(--border);color:var(--text-2);border-radius:20px;padding:5px 11px;font:12px var(--font-ui);cursor:pointer}
+.chipbtn.on{background:var(--accent-dim);border-color:var(--accent);color:var(--accent);font-weight:600}
+.ta{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font:12.5px/1.5 var(--font-ui);padding:8px 10px;resize:vertical}
 </style>
 </head>
 <body>
@@ -65,7 +77,7 @@ table.prev th{font:11px var(--font-mono);color:var(--text-3);text-transform:uppe
       <div class="field"><label for="lang">Idioma</label><select id="lang"></select></div>
       <div class="field"><label for="rev">Nº de modificación (X…)</label><input type="number" id="rev" min="1" value="1"></div>
     </div>
-    <div class="chk"><input type="checkbox" id="single"><label for="single">Respuesta única (botones de radio) en las de una sola correcta. Tu XML de ejemplo usa «varias respuestas» (casillas).</label></div>
+    <div class="chk"><input type="checkbox" id="single" checked><label for="single">Respuesta única (botones de radio) cuando solo hay una correcta. Las que tienen <b>varias correctas</b> se exportan siempre como respuesta múltiple (casillas), repartiendo el 100&nbsp;% entre las correctas y el −100&nbsp;% entre las incorrectas. Desmárcalo para usar casillas en todas, como en tu XML de ejemplo.</label></div>
   </div>
   <div class="card">
     <div class="section-title">Documentos<button class="btn sm" id="open">Abrir .zip / .docx</button></div>
@@ -77,11 +89,21 @@ table.prev th{font:11px var(--font-mono);color:var(--text-3);text-transform:uppe
   <div class="card">
     <div class="section-title">Preguntas</div>
     <div class="sum" id="sum"></div>
+    <div class="field" style="max-width:280px;margin-top:.8rem"><label for="flt">Mostrar</label><select id="flt"><option value="all">Todas</option><option value="issues">Solo con aviso o error</option><option value="marked">Solo marcadas para revisar</option></select></div>
     <div class="scroll" id="prev"></div>
+  </div>
+  <div class="card">
+    <div class="section-title">Lista de revisión tras importar<button class="btn sm" id="rv-clear">Borrar notas</button></div>
+    <div class="chk"><input type="checkbox" id="rv-auto" checked><label for="rv-auto">Incluir lo detectado automáticamente (errores, imágenes y avisos)</label></div>
+    <div class="sum" id="rv-sum" style="margin:.6rem 0"></div>
+    <textarea id="rv-text" class="ta" readonly rows="10" placeholder="La lista aparecerá aquí…"></textarea>
+    <div class="btns" style="margin-top:.5rem"><button class="btn sm" id="rv-copy" disabled>Copiar lista</button><button class="btn sm" id="rv-dl" disabled>Descargar .txt</button></div>
+    <div class="hint">Las notas se guardan en este navegador y se conservan al volver a cargar los mismos documentos.</div>
   </div>
   <div class="card">
     <div class="section-title">Moodle XML</div>
     <div class="field"><label for="fname">Nombre del archivo (opcional)</label><input type="text" id="fname" placeholder="preguntas-CÓDIGO-idioma-AAAAMMDD-HHMM.xml"></div>
+    <div class="chk" style="margin-bottom:.8rem"><input type="checkbox" id="xml-tags" checked><label for="xml-tags">Etiquetar en Moodle las preguntas marcadas o con imagen («revisar», «revisar-imagen»…) para filtrarlas en el banco de preguntas</label></div>
     <div class="btns"><button class="btn go" id="gen">Generar y descargar XML</button><button class="btn" id="copy">Copiar XML</button></div>
     <div id="msg" style="margin-top:.8rem"></div>
     <div id="outbox" style="display:none;margin-top:.8rem">
@@ -517,13 +539,14 @@ function qXml(q, name, single) {
     else for (let i = 1; i + 1 < F.length; i += 2) opts.push({ t: F[i].text, fb: F[i + 1].text, tag: F[i + 1].tag });
     const nc = opts.filter(o => o.tag === 'correcta').length;
     if (!nc) return { err: 'Ninguna opción está marcada como CORRETA.' };
-    const fr = nc === 1 ? '100' : (100 / nc).toFixed(5);
+    const ni = opts.length - nc, fmt = v => (Number.isInteger(v) ? String(v) : v.toFixed(5));
+    const fr = nc === 1 ? '100' : fmt(100 / nc), neg = nc > 1 && ni > 0 ? '-' + fmt(100 / ni) : '0';
     let warn = opts.some(o => !o.tag) ? 'Hay opciones sin marca CORRETA/INCORRETA: se han tratado como incorrectas.' : '';
-    if (nc > 1) warn += ' Hay ' + nc + ' correctas: cada una vale ' + fr + '%.';
+    if (nc > 1) warn += ' Varias correctas (' + nc + '): se exporta como respuesta múltiple; cada correcta vale ' + fr + ' % y cada incorrecta ' + neg + ' %.';
     let x = qHead('multichoice', name, F[0].text, '') + GRADE + '    <single>' + (single && nc === 1) + '</single>\n    <shuffleanswers>false</shuffleanswers>\n' +
       '    <answernumbering>abc</answernumbering>\n    <showstandardinstruction>0</showstandardinstruction>\n' + FB;
     opts.forEach(o => {
-      x += '    <answer fraction="' + (o.tag === 'correcta' ? fr : '0') + '" format="html">\n      <text>' + cd(htmlOf(o.t)) + '</text>\n' + tx('feedback', htmlOf(o.fb)).replace(/^ {4}/gm, '      ') + '    </answer>\n';
+      x += '    <answer fraction="' + (o.tag === 'correcta' ? fr : neg) + '" format="html">\n      <text>' + cd(htmlOf(o.t)) + '</text>\n' + tx('feedback', htmlOf(o.fb)).replace(/^ {4}/gm, '      ') + '    </answer>\n';
     });
     return { xml: x + '  </question>\n\n', warn: warn.trim() };
   }
@@ -565,7 +588,7 @@ function buildModel() {
       let bk = null; (d.parsed.blocks || []).forEach(b => { if (b.before <= q.n) bk = b; });
       const name = [code || 'CODIGO', lang, 'X' + rev, d.tipo, String(q.n).padStart(3, '0')].join('-');
       const cat = '$course$/top/' + lang.toLowerCase() + '/' + (d.folder || FOLDERS[d.tipo]) + (bk ? '/' + blockName(bk.text) : '');
-      const r = { doc: d.name, n: q.n, type: q.type, name, cat, warns: q.warns.slice(), err: null, xml: '' };
+      const r = { doc: d.name, n: q.n, type: q.type, name, cat, warns: q.warns.slice(), err: null, xml: '', key: d.name + '#' + q.n, q };
       if (q.errors.length) r.err = q.errors.join(' ');
       else {
         const x = qXml(q, name, single);
@@ -588,7 +611,7 @@ function buildXml(rows) {
       for (let i = 3; i <= p.length; i++) { const c = p.slice(0, i).join('/'); if (!seen.has(c) || (i === p.length)) { out += catXml(c); seen.add(c); } }
       cur = r.cat;
     }
-    out += r.xml;
+    out += withTags(r);
   });
   return out + '</quiz>\n';
 }
@@ -629,17 +652,7 @@ function renderDocs() {
   }).join('');
   renderPreview();
 }
-function renderPreview() {
-  const m = buildModel(), ok = m.rows.filter(r => !r.err), bad = m.rows.length - ok.length;
-  const nw = ok.filter(r => r.warns.length).length, cats = new Set(ok.map(r => r.cat)).size;
-  $('#sum').innerHTML = !m.rows.length ? 'Aún no hay preguntas: abre un .zip o varios .docx (y elige el tipo de cada uno).'
-    : '<b>' + ok.length + '</b> preguntas exportables en <b>' + cats + '</b> categorías' + (bad ? ' · <b style="color:var(--bad)">' + bad + ' no exportables (se omiten)</b>' : '') + (nw ? ' · ' + nw + ' con avisos' : '') +
-    '<br>Se pierde el formato del Word (cursivas, negritas, sub/superíndices) y las imágenes: el lector solo conserva el texto.';
-  $('#prev').innerHTML = m.rows.length ? '<table class="prev"><tr><th>Nombre</th><th>Tipo</th><th>Categoría</th><th>Estado</th></tr>' + m.rows.map(r =>
-    '<tr><td>' + esc(r.name) + '</td><td>' + esc((QTYPES[r.type] || QTYPES.bad).short) + '</td><td>' + esc(r.cat.replace('$course$/top/', '')) + '</td><td>' +
-    (r.err ? '<span class="qtag bad">error</span> ' + esc(r.err) : r.warns.length ? '<span class="qtag warn">aviso</span> ' + esc(r.warns.join(' ')) : '<span class="qtag">ok</span>') + '</td></tr>').join('') + '</table>' : '';
-}
-function saveSettings() { try { localStorage.setItem(SKEY, JSON.stringify({ code: $('#code').value, lang: $('#lang').value, rev: $('#rev').value, single: $('#single').checked })); } catch (e) {} }
+function saveSettings() { try { localStorage.setItem(SKEY, JSON.stringify({ code: $('#code').value, lang: $('#lang').value, rev: $('#rev').value, single2: $('#single').checked })); } catch (e) {} }
 function makeXml() {
   const m = buildModel(), ok = m.rows.filter(r => !r.err);
   if (!docs.length) { say('Primero abre un .zip o varios .docx.', 'bad'); return null; }
@@ -651,15 +664,16 @@ function makeXml() {
   return { xml: buildXml(m.rows), n: ok.length, m };
 }
 /* Guardado: 1) diálogo «Guardar como» del navegador, 2) descarga con enlace, 3) el recuadro de texto siempre queda a mano */
-async function saveFile(name, text) {
+async function saveFile(name, text, mime) {
+  mime = mime || 'application/xml'; const ext = '.' + name.split('.').pop();
   if (window.showSaveFilePicker) {
     try {
-      const h = await window.showSaveFilePicker({ suggestedName: name, types: [{ description: 'Moodle XML', accept: { 'application/xml': ['.xml'] } }] });
+      const h = await window.showSaveFilePicker({ suggestedName: name, types: [{ description: 'Archivo ' + ext, accept: { [mime]: [ext] } }] });
       const w = await h.createWritable(); await w.write(text); await w.close(); return 'picker';
     } catch (e) { if (e && e.name === 'AbortError') return 'cancel'; }
   }
   try {
-    const blob = new Blob([text], { type: 'application/xml;charset=utf-8' });
+    const blob = new Blob([text], { type: mime + ';charset=utf-8' });
     if (navigator.msSaveBlob) { navigator.msSaveBlob(blob, name); return 'anchor'; }
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.style.display = 'none';
     document.body.appendChild(a); a.click(); setTimeout(() => { a.remove(); URL.revokeObjectURL(a.href); }, 10000);
@@ -689,8 +703,106 @@ dropEl.addEventListener('click', () => $('#file').click());
 document.addEventListener('drop', e => { if (e.dataTransfer && e.dataTransfer.files.length) addFiles([...e.dataTransfer.files]); });
 $('#docs').addEventListener('input', e => { const t = e.target, i = t.dataset.i; if (i === undefined) return; docs[i][t.dataset.k] = t.value; if (t.dataset.k === 'tipo') renderDocs(); else renderPreview(); });
 $('#docs').addEventListener('click', e => { const i = e.target.dataset.rm; if (i === undefined) return; docs.splice(+i, 1); renderDocs(); });
+/* ── revisión de preguntas: detalle, notas y lista para después de importar ── */
+const NKEY = 'quizhub_notes';
+const TAGS = { texto: ['Texto a corregir', 'revisar-texto'], formato: ['Falta formato', 'revisar-formato'], imagen: ['Falta imagen', 'revisar-imagen'], otro: ['Otro', 'revisar'] };
+let notes = {}; try { notes = JSON.parse(localStorage.getItem(NKEY) || '{}') || {}; } catch (e) {}
+const saveNotes = () => { try { localStorage.setItem(NKEY, JSON.stringify(notes)); } catch (e) {} };
+const noteOf = k => notes[k] || { tags: [], text: '' };
+const marked = k => { const n = notes[k]; return !!(n && (n.tags.length || n.text.trim())); };
+const hasImg = r => r.q.fields.some(f => /<<Aquí hay un/.test(f.text));
+let openKey = null, lastModel = { rows: [] };
+
+function tagSet(r) {
+  const s = new Set(), n = noteOf(r.key);
+  n.tags.forEach(t => s.add(TAGS[t][1]));
+  if (hasImg(r)) s.add(TAGS.imagen[1]);
+  if (marked(r.key) || s.size) s.add('revisar');
+  return [...s];
+}
+function withTags(r) {
+  const t = $('#xml-tags') && $('#xml-tags').checked ? tagSet(r) : [];
+  if (!t.length) return r.xml;
+  return r.xml.replace('    <idnumber></idnumber>\n', '    <idnumber></idnumber>\n    <tags>\n' + t.map(x => '      <tag><text>' + xe(x) + '</text></tag>\n').join('') + '    </tags>\n');
+}
+
+function detailHtml(r) {
+  const q = r.q, nt = noteOf(r.key);
+  let h = '<div class="det"><div class="dmeta">' + esc(r.name) + ' · ' + esc(r.cat.replace('$course$/top/', '')) + ' · ' + esc(r.doc) + ' #' + r.n + '</div>';
+  if (r.err) h += '<div class="q-alert bad">' + esc(r.err) + ' <b>Esta pregunta NO se exporta.</b></div>';
+  r.warns.forEach(w => { h += '<div class="q-alert warn">' + esc(w) + '</div>'; });
+  h += q.fields.length ? q.fields.map(f => '<div class="fld"><div class="fl">' + esc(f.label) + (f.tag ? ' <span class="chip ' + (f.tag === 'correcta' ? 'ok' : 'ko') + '">' + f.tag + '</span>' : '') + '</div><div class="ft">' +
+    (f.text ? esc(f.text).replace(/&lt;&lt;Aquí hay (?:una imagen|un gráfico)&gt;&gt;/g, m => '<mark>' + m + '</mark>') : '<i>(vacío)</i>') + '</div></div>').join('') : '<div class="hint">No se pudo extraer el contenido de esta pregunta.</div>';
+  h += '<div class="fl" style="margin-top:.8rem">Marcar para revisar tras importar</div><div class="chips">' +
+    Object.keys(TAGS).map(k => '<button class="chipbtn' + (nt.tags.indexOf(k) >= 0 ? ' on' : '') + '" data-tag="' + k + '">' + TAGS[k][0] + '</button>').join('') + '</div>' +
+    '<textarea class="ta" data-note rows="3" placeholder="Nota: qué hay que corregir en esta pregunta…">' + esc(nt.text) + '</textarea>' +
+    '<div class="btns" style="margin-top:.5rem"><button class="btn sm" data-nav="-1">‹ Anterior</button><button class="btn sm" data-nav="1">Siguiente ›</button><button class="btn sm" data-close>Cerrar</button></div></div>';
+  return h;
+}
+
+function renderPreview() {
+  const m = lastModel = buildModel(), ok = m.rows.filter(r => !r.err), bad = m.rows.length - ok.length;
+  const nw = ok.filter(r => r.warns.length).length, nm = m.rows.filter(r => marked(r.key)).length, cats = new Set(ok.map(r => r.cat)).size;
+  $('#sum').innerHTML = !m.rows.length ? 'Aún no hay preguntas: abre un .zip o varios .docx (y elige el tipo de cada uno).'
+    : '<b>' + ok.length + '</b> preguntas exportables en <b>' + cats + '</b> categorías' + (bad ? ' · <b style="color:var(--bad)">' + bad + ' no exportables (se omiten)</b>' : '') + (nw ? ' · ' + nw + ' con avisos' : '') + (nm ? ' · <b>' + nm + ' marcadas para revisar</b>' : '') +
+    '<br>Pulsa una fila para ver la pregunta completa y marcarla. Se pierde el formato del Word (cursivas, negritas…) y las imágenes: el lector solo conserva el texto.';
+  const f = $('#flt').value, vis = m.rows.filter(r => f === 'issues' ? (r.err || r.warns.length) : f === 'marked' ? marked(r.key) : true);
+  const st = $('#prev').scrollTop;
+  $('#prev').innerHTML = vis.length ? '<table class="prev"><tr><th></th><th>Nombre</th><th>Tipo</th><th>Categoría</th><th>Estado</th></tr>' + vis.map(r =>
+    '<tr class="qr' + (r.key === openKey ? ' sel' : '') + '" data-key="' + esc(r.key) + '"><td class="mk">' + (marked(r.key) ? '⚑' : '') + '</td><td>' + esc(r.name) + '</td><td>' + esc((QTYPES[r.type] || QTYPES.bad).short) + '</td><td>' + esc(r.cat.replace('$course$/top/', '')) + '</td><td>' +
+    (r.err ? '<span class="qtag bad">error</span> ' + esc(r.err) : r.warns.length ? '<span class="qtag warn">aviso</span> ' + esc(r.warns.join(' ')) : '<span class="qtag">ok</span>') + '</td></tr>' +
+    (r.key === openKey ? '<tr class="dr"><td colspan="5">' + detailHtml(r) + '</td></tr>' : '')).join('') + '</table>' : (m.rows.length ? '<div class="hint">Ninguna pregunta cumple este filtro.</div>' : '');
+  $('#prev').scrollTop = st;
+  renderReview();
+}
+
+function reviewText() {
+  const m = lastModel, auto = $('#rv-auto').checked, out = [];
+  m.rows.forEach(r => {
+    const n = noteOf(r.key), a = auto ? (r.err ? ['NO SE EXPORTA: ' + r.err] : r.warns) : [];
+    if (!marked(r.key) && !a.length) return;
+    let s = '• ' + r.name + '   [' + r.cat.replace('$course$/top/', '') + ']   (' + r.doc + ' #' + r.n + ')';
+    if (n.tags.length) s += '\n    Marcas: ' + n.tags.map(t => TAGS[t][0]).join(', ');
+    if (n.text.trim()) s += '\n    Nota: ' + n.text.trim().replace(/\n/g, '\n          ');
+    a.forEach(x => { s += '\n    Detectado: ' + x; });
+    out.push(s);
+  });
+  if (!out.length) return '';
+  const t = new Date();
+  return 'REVISIÓN TRAS IMPORTAR · ' + (m.code || 'CODIGO') + '-' + m.lang + '-X' + m.rev + ' · ' + t.toLocaleDateString('es-ES') + '\n' + out.length + ' pregunta(s)\n\n' + out.join('\n\n') + '\n';
+}
+function renderReview() {
+  const t = reviewText(), n = t ? (t.match(/^• /gm) || []).length : 0;
+  $('#rv-text').value = t;
+  $('#rv-sum').textContent = n ? n + ' pregunta(s) en la lista.' : 'Aún no hay nada que revisar: marca preguntas en la tabla de arriba (o activa la detección automática).';
+  $('#rv-copy').disabled = $('#rv-dl').disabled = !n;
+}
+function visibleKeys() { return [...document.querySelectorAll('#prev tr.qr')].map(tr => tr.dataset.key); }
+$('#prev').addEventListener('click', e => {
+  const tg = e.target.closest('[data-tag]');
+  if (tg && openKey) { const n = notes[openKey] || (notes[openKey] = { tags: [], text: '' }), k = tg.dataset.tag, i = n.tags.indexOf(k); if (i >= 0) n.tags.splice(i, 1); else n.tags.push(k); saveNotes(); renderPreview(); return; }
+  const nv = e.target.closest('[data-nav]');
+  if (nv) { const ks = visibleKeys(), i = ks.indexOf(openKey), j = Math.min(ks.length - 1, Math.max(0, i + +nv.dataset.nav)); openKey = ks[j]; renderPreview(); const el = document.querySelector('#prev tr.sel'); if (el) el.scrollIntoView({ block: 'nearest' }); return; }
+  if (e.target.closest('[data-close]')) { openKey = null; renderPreview(); return; }
+  if (e.target.closest('.dr')) return;
+  const tr = e.target.closest('tr.qr');
+  if (tr) { openKey = openKey === tr.dataset.key ? null : tr.dataset.key; renderPreview(); }
+});
+$('#prev').addEventListener('input', e => {
+  if (!e.target.matches('[data-note]') || !openKey) return;
+  const n = notes[openKey] || (notes[openKey] = { tags: [], text: '' }); n.text = e.target.value; saveNotes();
+  const mk = document.querySelector('#prev tr.sel td.mk'); if (mk) mk.textContent = marked(openKey) ? '⚑' : '';
+  renderReview();
+});
+$('#flt').addEventListener('change', renderPreview);
+$('#rv-auto').addEventListener('change', renderReview);
+$('#rv-copy').addEventListener('click', async () => { await copyText($('#rv-text').value); say('✓ Lista de revisión copiada.', 'info'); });
+$('#rv-dl').addEventListener('click', async () => { const how = await saveFile('revision-' + (lastModel.code || 'preguntas') + '.txt', $('#rv-text').value, 'text/plain'); say(how === 'fail' ? 'No se pudo descargar: copia la lista del recuadro.' : '✓ Lista guardada (si no ves la descarga, cópiala del recuadro).', how === 'fail' ? 'bad' : 'info'); });
+$('#rv-clear').addEventListener('click', () => { if (confirm('¿Borrar todas las notas y marcas guardadas?')) { notes = {}; saveNotes(); renderPreview(); } });
+$('#xml-tags').addEventListener('change', () => say(''));
+
 $('#lang').innerHTML = Object.keys(LANGS).map(k => '<option value="' + k + '">' + LANGS[k] + ' (' + k + ')</option>').join('');
-try { const s = JSON.parse(localStorage.getItem(SKEY) || 'null'); if (s) { $('#code').value = s.code || ''; $('#lang').value = s.lang || 'ESP'; $('#rev').value = s.rev || 1; $('#single').checked = !!s.single; } } catch (e) {}
+try { const s = JSON.parse(localStorage.getItem(SKEY) || 'null'); if (s) { $('#code').value = s.code || ''; $('#lang').value = s.lang || 'ESP'; $('#rev').value = s.rev || 1; $('#single').checked = s.single2 !== false; } } catch (e) {}
 ['#code', '#lang', '#rev', '#single'].forEach(id => $(id).addEventListener('input', () => { saveSettings(); renderPreview(); }));
 renderDocs();
 </script>
